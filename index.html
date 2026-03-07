@@ -30,7 +30,7 @@
 
         /* Zona de piezas inferior */
         .zona-piezas { 
-            width: 600px; min-height: 120px; margin: 20px auto; 
+            width: 540px; min-height: 63px; margin: 20px auto; 
             border: 2px dashed #999; border-radius: 15px; 
             display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; padding: 15px; background: white;
         }
@@ -83,9 +83,9 @@
     </div>
 
     <script>
-        // Nombres base según tus archivos
         const animales = ['orca', 'foca', 'pinguinos', 'peces', 'krill', 'alga'];
         let nivelActual = 1;
+        let piezaTocada = null; // Variable para el movimiento táctil
 
         function comenzar(n) {
             nivelActual = n;
@@ -104,18 +104,22 @@
                 img.id = id;
                 img.className = 'animal';
                 
-                // Lógica de imágenes por nivel
                 if (nivelActual === 2) {
-                    img.src = `img/imagen_${id}_borrosa.jpeg`; // Usa tus archivos _borrosa
+                    img.src = `img/imagen_${id}_borrosa.jpeg`;
                 } else {
-                    img.src = `img/imagen_${id}.jpeg`; // Nivel 1 y 3 usan normales
+                    img.src = `img/imagen_${id}.jpeg`;
                 }
 
                 if (nivelActual === 3) {
                     configurarNivel3(id);
                 } else {
                     img.draggable = true;
-                    img.ondragstart = (e) => e.dataTransfer.setData("text", e.target.id);
+                    img.ondragstart = drag;
+                    
+                    // EVENTOS TÁCTILES PARA MÓVIL
+                    img.addEventListener('touchstart', touchStart, {passive: false});
+                    img.addEventListener('touchmove', touchMove, {passive: false});
+                    img.addEventListener('touchend', touchEnd, {passive: false});
                 }
                 
                 img.onclick = () => reproducir(id);
@@ -123,66 +127,102 @@
             });
         }
 
-        function configurarNivel3(id) {
-            const zona = document.getElementById(`zona-${id}`);
-            zona.innerHTML = `<input type="text" class="input-nombre" placeholder="Nombre..." onchange="validar(this, '${id}')">`;
+        // --- LÓGICA PARA MÓVIL (TOUCH) ---
+
+        function touchStart(e) {
+            piezaTocada = e.target;
+            piezaTocada.style.position = "fixed";
+            piezaTocada.style.zIndex = "1000";
+            piezaTocada.style.pointerEvents = "none"; // Permite detectar lo que hay debajo (el hueco)
         }
 
-        function validar(input, id) {
-            // 1. Limpiamos lo que escribe el niño (minúsculas y sin espacios)
-            let textoUsuario = input.value.toLowerCase().trim();
-    
-            // 2. Función mágica para quitar acentos y diéresis (Normalización)
-            // Esto convierte "pingüino" en "pinguino" solo para comparar
-            let textoLimpio = textoUsuario.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        function touchMove(e) {
+            if (!piezaTocada) return;
+            e.preventDefault(); // Evita el scroll mientras mueves al animal
+            let touch = e.touches[0];
+            // Centramos la imagen bajo el dedo
+            piezaTocada.style.left = (touch.clientX - 40) + "px";
+            piezaTocada.style.top = (touch.clientY - 30) + "px";
+        }
 
-            // 3. Definimos la palabra clave (usamos 'pinguin' para aceptar singular/plural)
-            let palabraClave = id;
-            if (id === 'pinguinos') palabraClave = 'pinguin';
+        function touchEnd(e) {
+            if (!piezaTocada) return;
+            let el = piezaTocada;
+            piezaTocada = null;
+            
+            // Detectamos qué elemento hay en la posición donde soltamos
+            let touch = e.changedTouches[0];
+            let debajo = document.elementFromPoint(touch.clientX, touch.clientY);
+            let destino = debajo ? debajo.closest('.hueco') : null;
 
-            // 4. COMPROBACIÓN: ¿El texto limpio contiene la palabra clave?
-            if (textoLimpio.includes(palabraClave)) {
-                // ACIERTO
-                input.parentElement.classList.add('acierto');
-                input.disabled = true; // Bloqueamos el cuadro
-                input.style.color = "#2e7d32"; // Letra verde al acertar
-                reproducir('acierto');
-                reproducir(id); 
-            } else {
-                // ERROR
-                input.classList.add('error-anim');
-                reproducir('error');
-                setTimeout(() => { 
-                  input.value = ""; 
-                 input.classList.remove('error-anim'); 
-                }, 500);
-            }
-        }       
+            validarColocacion(el, destino);
+            
+            // Devolvemos el estilo para que no flote
+            el.style.position = "static";
+            el.style.pointerEvents = "auto";
+        }
+
+        // --- LÓGICA PARA PC (MOUSE) ---
+
+        function drag(ev) {
+            ev.dataTransfer.setData("text", ev.target.id);
+        }
 
         function drop(ev) {
             ev.preventDefault();
             const id = ev.dataTransfer.getData("text");
             const pieza = document.getElementById(id);
             const destino = ev.target.closest('.hueco');
+            validarColocacion(pieza, destino);
+        }
 
-            if (destino && destino.getAttribute('data-target') === id) {
+        function allowDrop(ev) { ev.preventDefault(); }
+
+        // --- FUNCIÓN UNIFICADA DE VALIDACIÓN ---
+
+        function validarColocacion(pieza, destino) {
+            if (destino && destino.getAttribute('data-target') === pieza.id) {
                 destino.appendChild(pieza);
                 destino.classList.add('acierto');
-                // Si es nivel 2, revelamos la imagen normal al acertar
-                if (nivelActual === 2) pieza.src = `img/imagen_${id}.jpeg`;
-                pieza.style.width = "100%"; pieza.style.height = "100%";
+                if (nivelActual === 2) pieza.src = `img/imagen_${pieza.id}.jpeg`;
+                pieza.style.width = "100%"; 
+                pieza.style.height = "100%";
                 reproducir('acierto');
-                setTimeout(() => reproducir(id), 500);
+                setTimeout(() => reproducir(pieza.id), 500);
             } else {
+                // Si falla o se suelta fuera, vuelve a la caja de piezas
+                document.getElementById('piezas').appendChild(pieza);
                 pieza.classList.add('error-anim');
                 reproducir('error');
                 setTimeout(() => pieza.classList.remove('error-anim'), 500);
             }
         }
 
-        function allowDrop(ev) { ev.preventDefault(); }
+        // --- NIVEL 3 Y AYUDA ---
+
+        function configurarNivel3(id) {
+            const zona = document.getElementById(`zona-${id}`);
+            zona.innerHTML = `<input type="text" class="input-nombre" placeholder="Nombre..." onchange="validarNombre(this, '${id}')">`;
+        }
+
+        function validarNombre(input, id) {
+            let textoUsuario = input.value.toLowerCase().trim();
+            let textoLimpio = textoUsuario.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            let palabraClave = (id === 'pinguinos') ? 'pinguin' : id;
+
+            if (textoLimpio.includes(palabraClave)) {
+                input.parentElement.classList.add('acierto');
+                input.disabled = true;
+                input.style.color = "#2e7d32";
+                reproducir('acierto');
+                reproducir(id); 
+            } else {
+                input.classList.add('error-anim');
+                reproducir('error');
+                setTimeout(() => { input.value = ""; input.classList.remove('error-anim'); }, 500);
+            }
+        }
+
         function abrirAyuda() { document.getElementById('modal-ayuda').style.display = 'flex'; }
         function reproducir(s) { new Audio(`audio/${s}.mp3`).play().catch(() => {}); }
     </script>
-</body>
-</html>
