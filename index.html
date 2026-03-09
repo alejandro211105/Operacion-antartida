@@ -23,7 +23,6 @@
 
         .contenedor-animal { position: relative; width: 85px; height: 65px; z-index: 5; }
         
-        /* Botón de escucha debajo de las piezas */
         #zona-escucha {
             width: 95%; max-width: 600px; margin: 10px auto;
             padding: 15px; background: #2196F3; color: white;
@@ -115,6 +114,25 @@
             cargarJuego();
         }
 
+        function crearPieza(id) {
+            const contenedor = document.createElement('div');
+            contenedor.className = 'contenedor-animal';
+            contenedor.id = "cont-" + id;
+
+            const img = document.createElement('img');
+            img.className = 'animal';
+            img.src = (nivelActual >= 2) ? `img/imagen_${id}_borrosa.jpeg` : `img/imagen_${id}.jpeg`;
+
+            contenedor.draggable = true;
+            contenedor.ondragstart = (e) => e.dataTransfer.setData("text", contenedor.id);
+            contenedor.addEventListener('touchstart', touchStart, {passive: false});
+            contenedor.addEventListener('touchmove', touchMove, {passive: false});
+            contenedor.addEventListener('touchend', touchEnd, {passive: false});
+
+            contenedor.appendChild(img);
+            return contenedor;
+        }
+
         function cargarJuego() {
             const piezasDiv = document.getElementById('piezas');
             piezasDiv.innerHTML = "";
@@ -125,25 +143,25 @@
                 if (nivelActual === 3) configurarNivel3(h);
             });
 
-            const mezcla = [...animales].sort(() => Math.random() - 0.5);
+            let animalesParaMezclar = [...animales];
+            
+            // Lógica de ayuda para el Nivel 1
+            if (nivelActual === 1) {
+                const ayuda = [...animales].sort(() => Math.random() - 0.5).slice(0, 2);
+                ayuda.forEach(id => {
+                    const hueco = document.getElementById(`zona-${id}`);
+                    const pieza = crearPieza(id);
+                    hueco.appendChild(pieza);
+                    hueco.classList.add('acierto');
+                    pieza.querySelector('img').src = `img/imagen_${id}.jpeg`;
+                    pieza.style.width = "80px"; pieza.style.height = "60px";
+                    animalesParaMezclar = animalesParaMezclar.filter(a => a !== id);
+                });
+            }
+
+            const mezcla = animalesParaMezclar.sort(() => Math.random() - 0.5);
             mezcla.forEach(id => {
-                const contenedor = document.createElement('div');
-                contenedor.className = 'contenedor-animal';
-                contenedor.id = "cont-" + id;
-
-                const img = document.createElement('img');
-                img.className = 'animal';
-                img.src = (nivelActual >= 2) ? `img/imagen_${id}_borrosa.jpeg` : `img/imagen_${id}.jpeg`;
-
-                // PC y Móvil: Arrastre habilitado para todos los niveles para poder escuchar
-                contenedor.draggable = true;
-                contenedor.ondragstart = (e) => e.dataTransfer.setData("text", contenedor.id);
-                
-                contenedor.addEventListener('touchstart', touchStart, {passive: false});
-                contenedor.addEventListener('touchmove', touchMove, {passive: false});
-                contenedor.addEventListener('touchend', touchEnd, {passive: false});
-
-                contenedor.appendChild(img);
+                const contenedor = crearPieza(id);
                 piezasDiv.appendChild(contenedor);
             });
         }
@@ -161,20 +179,15 @@
             sonido.onended = finalizar;
         }
 
-        // LÓGICA PC
         function allowDrop(ev) { ev.preventDefault(); }
-        
         function drop(ev) {
             ev.preventDefault();
             const contId = ev.dataTransfer.getData("text");
             const cont = document.getElementById(contId);
             const destino = ev.target.closest('.hueco');
-            if (destino) {
-                validarColocacion(cont, contId.replace("cont-", ""), destino);
-            }
+            if (destino) { validarColocacion(cont, contId.replace("cont-", ""), destino); }
         }
 
-        // Función específica para soltar en el botón de audio
         function dropAudio(ev) {
             ev.preventDefault();
             const contId = ev.dataTransfer.getData("text");
@@ -182,7 +195,6 @@
             reproducirAnimalEspecial(idAnimal);
         }
 
-        // LÓGICA MÓVIL
         function touchStart(e) {
             piezaTocada = e.currentTarget;
             piezaTocada.style.position = "fixed";
@@ -205,7 +217,6 @@
             cont.style.display = "none";
             let debajo = document.elementFromPoint(touch.clientX, touch.clientY);
             cont.style.display = "block";
-            
             let destinoHueco = debajo ? debajo.closest('.hueco') : null;
             let destinoAudio = debajo ? debajo.closest('#zona-escucha') : null;
 
@@ -214,14 +225,12 @@
             } else {
                 validarColocacion(cont, cont.id.replace("cont-", ""), destinoHueco);
             }
-            
             cont.style.position = "static"; 
             cont.style.pointerEvents = "auto";
         }
 
         function validarColocacion(contenedor, id, destino) {
-            if (nivelActual === 3) return; // En nivel 3 se escribe, no se arrastra a la pirámide
-            
+            if (nivelActual === 3) return;
             if (destino && destino.getAttribute('data-target') === id) {
                 destino.appendChild(contenedor);
                 destino.classList.add('acierto');
@@ -268,18 +277,14 @@
                 audioVictoria.loop = true;
                 audioVictoria.play().catch(() => {});
                 setTimeout(() => {
-                    document.addEventListener('touchstart', () => {
-                        if(audioVictoria) { audioVictoria.pause(); audioVictoria.currentTime = 0; }
-                    }, { once: true });
-                    document.addEventListener('click', () => {
-                        if(audioVictoria) { audioVictoria.pause(); audioVictoria.currentTime = 0; }
-                    }, { once: true });
+                    const detenerV = () => { if(audioVictoria) { audioVictoria.pause(); audioVictoria.currentTime = 0; } };
+                    document.addEventListener('touchstart', detenerV, { once: true });
+                    document.addEventListener('click', detenerV, { once: true });
                 }, 1000);
             }
         }
 
         function abrirAyuda() { document.getElementById('modal-ayuda').style.display = 'flex'; }
-        
         function reproducirEfecto(s) {
             if (!audioGeneral.paused) audioGeneral.pause();
             let sonido = new Audio(`audios/${s}.mp3`);
