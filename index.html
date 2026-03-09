@@ -22,12 +22,13 @@
         }
 
         .contenedor-animal { position: relative; width: 85px; height: 65px; z-index: 5; }
-        .btn-audio {
-            position: absolute; top: -8px; left: -8px; z-index: 20;
-            background: white; border: 1px solid #ccc; border-radius: 50%;
-            width: 28px; height: 28px; cursor: pointer; font-size: 14px;
-            display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        
+        /* Botón de escucha debajo de las piezas */
+        #zona-escucha {
+            width: 95%; max-width: 600px; margin: 10px auto;
+            padding: 15px; background: #2196F3; color: white;
+            border: 3px dashed #ffffff; border-radius: 15px;
+            font-weight: bold; font-size: 18px; cursor: default;
         }
 
         .hueco { 
@@ -45,7 +46,7 @@
 
         .zona-piezas { 
             width: 95%; max-width: 600px; min-height: 100px; 
-            margin: 20px auto; border: 2px dashed #999; border-radius: 15px; 
+            margin: 20px auto 5px auto; border: 2px dashed #999; border-radius: 15px; 
             display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
             gap: 15px; padding: 15px; background: white;
         }
@@ -86,6 +87,10 @@
             <div class="hueco" id="zona-alga" ondrop="drop(event)" ondragover="allowDrop(event)" data-target="alga"></div>
         </div>
         <div class="zona-piezas" id="piezas"></div>
+        
+        <div id="zona-escucha" ondrop="dropAudio(event)" ondragover="allowDrop(event)">
+            🔊 Arrastra aquí para escuchar
+        </div>
     </div>
 
     <div id="modal-ayuda" onclick="this.style.display='none'"><img src="img/imagen_ayuda.jpeg"></div>
@@ -126,27 +131,18 @@
                 contenedor.className = 'contenedor-animal';
                 contenedor.id = "cont-" + id;
 
-                const btn = document.createElement('button');
-                btn.className = 'btn-audio';
-                btn.innerHTML = '🔊';
-                btn.onclick = (e) => { e.stopPropagation(); reproducirAnimalEspecial(id); };
-
                 const img = document.createElement('img');
                 img.className = 'animal';
                 img.src = (nivelActual >= 2) ? `img/imagen_${id}_borrosa.jpeg` : `img/imagen_${id}.jpeg`;
 
-                if (nivelActual !== 3) {
-                    // PC: Arrastre con ratón
-                    contenedor.draggable = true;
-                    contenedor.ondragstart = (e) => e.dataTransfer.setData("text", contenedor.id);
-                    
-                    // MÓVIL: Arrastre táctil
-                    contenedor.addEventListener('touchstart', touchStart, {passive: false});
-                    contenedor.addEventListener('touchmove', touchMove, {passive: false});
-                    contenedor.addEventListener('touchend', touchEnd, {passive: false});
-                }
+                // PC y Móvil: Arrastre habilitado para todos los niveles para poder escuchar
+                contenedor.draggable = true;
+                contenedor.ondragstart = (e) => e.dataTransfer.setData("text", contenedor.id);
+                
+                contenedor.addEventListener('touchstart', touchStart, {passive: false});
+                contenedor.addEventListener('touchmove', touchMove, {passive: false});
+                contenedor.addEventListener('touchend', touchEnd, {passive: false});
 
-                contenedor.appendChild(btn);
                 contenedor.appendChild(img);
                 piezasDiv.appendChild(contenedor);
             });
@@ -167,11 +163,23 @@
 
         // LÓGICA PC
         function allowDrop(ev) { ev.preventDefault(); }
+        
         function drop(ev) {
             ev.preventDefault();
             const contId = ev.dataTransfer.getData("text");
             const cont = document.getElementById(contId);
-            validarColocacion(cont, contId.replace("cont-", ""), ev.target.closest('.hueco'));
+            const destino = ev.target.closest('.hueco');
+            if (destino) {
+                validarColocacion(cont, contId.replace("cont-", ""), destino);
+            }
+        }
+
+        // Función específica para soltar en el botón de audio
+        function dropAudio(ev) {
+            ev.preventDefault();
+            const contId = ev.dataTransfer.getData("text");
+            const idAnimal = contId.replace("cont-", "");
+            reproducirAnimalEspecial(idAnimal);
         }
 
         // LÓGICA MÓVIL
@@ -197,13 +205,23 @@
             cont.style.display = "none";
             let debajo = document.elementFromPoint(touch.clientX, touch.clientY);
             cont.style.display = "block";
-            let destino = debajo ? debajo.closest('.hueco') : null;
-            validarColocacion(cont, cont.id.replace("cont-", ""), destino);
+            
+            let destinoHueco = debajo ? debajo.closest('.hueco') : null;
+            let destinoAudio = debajo ? debajo.closest('#zona-escucha') : null;
+
+            if (destinoAudio) {
+                reproducirAnimalEspecial(cont.id.replace("cont-", ""));
+            } else {
+                validarColocacion(cont, cont.id.replace("cont-", ""), destinoHueco);
+            }
+            
             cont.style.position = "static"; 
             cont.style.pointerEvents = "auto";
         }
 
         function validarColocacion(contenedor, id, destino) {
+            if (nivelActual === 3) return; // En nivel 3 se escribe, no se arrastra a la pirámide
+            
             if (destino && destino.getAttribute('data-target') === id) {
                 destino.appendChild(contenedor);
                 destino.classList.add('acierto');
@@ -261,6 +279,7 @@
         }
 
         function abrirAyuda() { document.getElementById('modal-ayuda').style.display = 'flex'; }
+        
         function reproducirEfecto(s) {
             if (!audioGeneral.paused) audioGeneral.pause();
             let sonido = new Audio(`audios/${s}.mp3`);
