@@ -3,10 +3,10 @@
 <head>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Misión Antártida</title>
     <style>
-        body { font-family: 'Comic Sans MS', sans-serif; background-color: #e0f7ff; text-align: center; margin: 0; padding: 10px; }
+        body { font-family: 'Comic Sans MS', sans-serif; background-color: #e0f7ff; text-align: center; margin: 0; padding: 10px; touch-action: manipulation; }
         #pantalla-inicio { padding: 50px 20px; }
         .boton { padding: 15px 30px; font-size: 18px; margin: 10px; cursor: pointer; border-radius: 12px; border: none; color: white; width: 80%; max-width: 300px; }
         .btn-1 { background: #4CAF50; } .btn-2 { background: #FF9800; } .btn-3 { background: #2196F3; }
@@ -21,9 +21,9 @@
             background-size: contain; background-repeat: no-repeat; background-position: center;
         }
 
-        .contenedor-animal { position: relative; width: 85px; height: 65px; cursor: grab; }
+        .contenedor-animal { position: relative; width: 85px; height: 65px; z-index: 5; }
         .btn-audio {
-            position: absolute; top: -8px; left: -8px; z-index: 10;
+            position: absolute; top: -8px; left: -8px; z-index: 20;
             background: white; border: 1px solid #ccc; border-radius: 50%;
             width: 28px; height: 28px; cursor: pointer; font-size: 14px;
             display: flex; align-items: center; justify-content: center;
@@ -36,7 +36,7 @@
             display: flex; align-items: center; justify-content: center; border-radius: 5px; 
         }
 
-        #zona-orca { top: 15%; left: 41%; }
+        #zona-orca { top: 15%; left: 41%; width: 18%; }
         #zona-foca { top: 29%; left: 32%; width: 37%; }
         #zona-pinguinos { top: 43%; left: 25%; width: 50%; }
         #zona-peces { top: 57%; left: 18%; width: 64%;}
@@ -51,12 +51,7 @@
         }
 
         .animal { width: 100%; height: 100%; object-fit: cover; border-radius: 5px; pointer-events: none; }
-
-        .input-nombre { 
-            background: transparent; border: none; outline: none; text-align: center; 
-            width: 100%; color: #000; font-family: 'Comic Sans MS', sans-serif; 
-            font-size: 14px; font-weight: bold; 
-        }
+        .input-nombre { background: transparent; border: none; outline: none; text-align: center; width: 100%; color: #000; font-weight: bold; font-size: 14px; }
         .input-nombre::placeholder { color: #000 !important; font-weight: bold; opacity: 1; }
 
         #modal-ayuda { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; }
@@ -93,9 +88,7 @@
         <div class="zona-piezas" id="piezas"></div>
     </div>
 
-    <div id="modal-ayuda" onclick="this.style.display='none'">
-        <img src="img/imagen_ayuda.jpeg">
-    </div>
+    <div id="modal-ayuda" onclick="this.style.display='none'"><img src="img/imagen_ayuda.jpeg"></div>
 
     <script>
         let audioGeneral = new Audio('audios/General.mpeg'); 
@@ -105,21 +98,27 @@
         const animales = ['orca', 'foca', 'pinguinos', 'peces', 'krill', 'alga'];
         let nivelActual = 1;
         let piezaTocada = null; 
-        let intervaloConfeti = null; 
         let audioVictoria = null;    
 
         function comenzar(n) {
             nivelActual = n;
             document.getElementById('pantalla-inicio').style.display = 'none';
             document.getElementById('juego').style.display = 'block';
-            audioGeneral.play().catch(() => console.log("Clic requerido para audio"));
+            audioGeneral.play().catch(() => {
+                document.addEventListener('touchstart', () => audioGeneral.play(), {once: true});
+            });
             cargarJuego();
         }
 
         function cargarJuego() {
             const piezasDiv = document.getElementById('piezas');
             piezasDiv.innerHTML = "";
-            if (nivelActual === 3) { animales.forEach(id => configurarNivel3(id)); }
+            const huecos = document.querySelectorAll('.hueco');
+            huecos.forEach(h => {
+                h.innerHTML = "";
+                h.classList.remove('acierto');
+                if (nivelActual === 3) configurarNivel3(h);
+            });
 
             const mezcla = [...animales].sort(() => Math.random() - 0.5);
             mezcla.forEach(id => {
@@ -134,12 +133,14 @@
 
                 const img = document.createElement('img');
                 img.className = 'animal';
-                // CAMBIO: Nivel 3 ahora también usa las imágenes borrosas del Nivel 2
-                img.src = (nivelActual === 2 || nivelActual === 3) ? `img/imagen_${id}_borrosa.jpeg` : `img/imagen_${id}.jpeg`;
+                img.src = (nivelActual >= 2) ? `img/imagen_${id}_borrosa.jpeg` : `img/imagen_${id}.jpeg`;
 
                 if (nivelActual !== 3) {
+                    // PC: Arrastre con ratón
                     contenedor.draggable = true;
                     contenedor.ondragstart = (e) => e.dataTransfer.setData("text", contenedor.id);
+                    
+                    // MÓVIL: Arrastre táctil
                     contenedor.addEventListener('touchstart', touchStart, {passive: false});
                     contenedor.addEventListener('touchmove', touchMove, {passive: false});
                     contenedor.addEventListener('touchend', touchEnd, {passive: false});
@@ -151,22 +152,29 @@
             });
         }
 
-        // CORRECCIÓN MÓVILES: Pausa garantizada del audio general
         function reproducirAnimalEspecial(nombre) {
             if (!audioGeneral.paused) audioGeneral.pause();
-            
-            let nombreFormateado = nombre.charAt(0).toUpperCase() + nombre.slice(1);
-            let sonido = new Audio(`audios/${nombreFormateado}.ogg`);
-
+            let n = nombre.charAt(0).toUpperCase() + nombre.slice(1);
+            let sonido = new Audio(`audios/${n}.ogg`);
             let finalizar = () => { if (!audioVictoria || audioVictoria.paused) audioGeneral.play().catch(() => {}); };
 
-            sonido.play().then(() => { audioGeneral.pause(); }).catch(() => {
-                sonido = new Audio(`audios/${nombreFormateado}.mpeg`);
-                sonido.play().then(() => { audioGeneral.pause(); }).catch(() => finalizar());
+            sonido.play().then(() => audioGeneral.pause()).catch(() => {
+                sonido = new Audio(`audios/${n}.mpeg`);
+                sonido.play().then(() => audioGeneral.pause()).catch(() => finalizar());
             });
             sonido.onended = finalizar;
         }
 
+        // LÓGICA PC
+        function allowDrop(ev) { ev.preventDefault(); }
+        function drop(ev) {
+            ev.preventDefault();
+            const contId = ev.dataTransfer.getData("text");
+            const cont = document.getElementById(contId);
+            validarColocacion(cont, contId.replace("cont-", ""), ev.target.closest('.hueco'));
+        }
+
+        // LÓGICA MÓVIL
         function touchStart(e) {
             piezaTocada = e.currentTarget;
             piezaTocada.style.position = "fixed";
@@ -186,84 +194,66 @@
             if (!piezaTocada) return;
             let cont = piezaTocada; piezaTocada = null;
             let touch = e.changedTouches[0];
+            cont.style.display = "none";
             let debajo = document.elementFromPoint(touch.clientX, touch.clientY);
+            cont.style.display = "block";
             let destino = debajo ? debajo.closest('.hueco') : null;
             validarColocacion(cont, cont.id.replace("cont-", ""), destino);
-            cont.style.position = "static"; cont.style.pointerEvents = "auto";
+            cont.style.position = "static"; 
+            cont.style.pointerEvents = "auto";
         }
 
-        function allowDrop(ev) { ev.preventDefault(); }
-        function drop(ev) {
-            ev.preventDefault();
-            const contId = ev.dataTransfer.getData("text");
-            const cont = document.getElementById(contId);
-            validarColocacion(cont, contId.replace("cont-", ""), ev.target.closest('.hueco'));
-        }
-
-        // CORRECCIÓN MÓVILES: Forzar visibilidad del botón al fallar
-        function validarColocacion(contenedor, idAnimal, destino) {
-           if (destino && destino.getAttribute('data-target') === idAnimal) {
+        function validarColocacion(contenedor, id, destino) {
+            if (destino && destino.getAttribute('data-target') === id) {
                 destino.appendChild(contenedor);
                 destino.classList.add('acierto');
-                const img = contenedor.querySelector('img');
-                img.src = `img/imagen_${idAnimal}.jpeg`;
-                contenedor.style.width = "80px"; 
-                contenedor.style.height = "60px";
-                reproducir('acierto');
-                setTimeout(() => { reproducir(idAnimal); comprobarVictoria(); }, 500);
+                contenedor.querySelector('img').src = `img/imagen_${id}.jpeg`;
+                contenedor.style.width = "80px"; contenedor.style.height = "60px";
+                reproducirEfecto('acierto');
+                setTimeout(() => { reproducirAnimalEspecial(id); comprobarVictoria(); }, 500);
             } else {
-                const piezasDiv = document.getElementById('piezas');
-                piezasDiv.appendChild(contenedor);
-                const btn = contenedor.querySelector('.btn-audio');
-                if (btn) btn.style.display = "flex"; // Evita que desaparezca en móvil
-
+                document.getElementById('piezas').appendChild(contenedor);
                 contenedor.classList.add('error-anim');
-                reproducir('error');
+                reproducirEfecto('error');
                 setTimeout(() => contenedor.classList.remove('error-anim'), 500);
             }
         }
 
-        function configurarNivel3(id) {
-            const zona = document.getElementById(`zona-${id}`);
+        function configurarNivel3(zona) {
+            let id = zona.getAttribute('data-target');
             zona.innerHTML = `<input type="text" class="input-nombre" placeholder="Nombre..." onchange="validarNombre(this, '${id}')">`;
         }
 
         function validarNombre(input, id) {
-            let textoUsuario = input.value.toLowerCase().trim();
-            let textoLimpio = textoUsuario.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            let esCorrecto = false;
-
-            if (id === 'pinguinos') { esCorrecto = textoLimpio.includes('pinguin'); } 
-            else if (id === 'peces') { esCorrecto = textoLimpio.includes('pez') || textoLimpio.includes('peces'); } 
-            else { esCorrecto = textoLimpio.includes(id); }
-
-            if (esCorrecto) {
-                const zona = input.parentElement;
+            let txt = input.value.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            let ok = (id === 'peces') ? (txt.includes('pez') || txt.includes('peces')) : (id === 'pinguinos' ? txt.includes('pinguin') : txt.includes(id));
+            if (ok) {
+                let zona = input.parentElement;
                 zona.classList.add('acierto');
-                zona.innerHTML = `<img src="img/imagen_${id}.jpeg" style="width:80px; height:60px; border-radius:5px;">`;
-                const piezaAbajo = document.getElementById("cont-" + id);
-                if (piezaAbajo) piezaAbajo.remove();
-                reproducir('acierto');
-                setTimeout(() => { reproducir(id); comprobarVictoria(); }, 500);
+                zona.innerHTML = `<img src="img/imagen_${id}.jpeg" style="width:80px;height:60px;border-radius:5px;">`;
+                let p = document.getElementById("cont-" + id);
+                if (p) p.remove();
+                reproducirEfecto('acierto');
+                setTimeout(() => { reproducirAnimalEspecial(id); comprobarVictoria(); }, 500);
             } else {
                 input.classList.add('error-anim');
-                reproducir('error');
+                reproducirEfecto('error');
                 setTimeout(() => { input.value = ""; input.classList.remove('error-anim'); }, 500);
             }
         }
 
         function comprobarVictoria() {
             if (document.querySelectorAll('.acierto').length === 6) {
-                if (!audioGeneral.paused) audioGeneral.pause();
-                intervaloConfeti = setInterval(() => {
-                    confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 }, colors: ['#2196F3', '#4CAF50', '#FF9800', '#ffffff'] });
-                }, 500);
+                audioGeneral.pause();
+                confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
                 audioVictoria = new Audio('audios/Victoria.mpeg');
                 audioVictoria.loop = true;
                 audioVictoria.play().catch(() => {});
                 setTimeout(() => {
+                    document.addEventListener('touchstart', () => {
+                        if(audioVictoria) { audioVictoria.pause(); audioVictoria.currentTime = 0; }
+                    }, { once: true });
                     document.addEventListener('click', () => {
-                        clearInterval(intervaloConfeti); intervaloConfeti = null;
                         if(audioVictoria) { audioVictoria.pause(); audioVictoria.currentTime = 0; }
                     }, { once: true });
                 }, 1000);
@@ -271,12 +261,10 @@
         }
 
         function abrirAyuda() { document.getElementById('modal-ayuda').style.display = 'flex'; }
-        
-        // CORRECCIÓN MÓVILES: Prioridad de audio y pausa del General
-        function reproducir(s) { 
+        function reproducirEfecto(s) {
             if (!audioGeneral.paused) audioGeneral.pause();
             let sonido = new Audio(`audios/${s}.mp3`);
-            sonido.play().then(() => { audioGeneral.pause(); }).catch(() => { if (!audioVictoria || audioVictoria.paused) audioGeneral.play(); });
+            sonido.play().then(() => audioGeneral.pause()).catch(() => { if (!audioVictoria || audioVictoria.paused) audioGeneral.play(); });
             sonido.onended = () => { if (!audioVictoria || audioVictoria.paused) audioGeneral.play(); };
         }
     </script>
